@@ -230,7 +230,7 @@ function mpOnEvent(code, c, a) {
     case EV.ENDREQ: if (isHost() && !mpRoundOver) mpRoundEnd(c.w, c.r); break;
     case EV.DEATH: {
       feed((c.k || 'Someone') + ' eliminated ' + (c.n || 'a player'));
-      mpKills[c.n] = (mpKills[c.n] || 0) + 1;
+      mpKills[c.k] = (mpKills[c.k] || 0) + 1;
       const r = rpOf(a);
       if (r) { r.hp = 0; r.alive = false; paintTag(r, true); }
       mpCheckElimination();
@@ -289,7 +289,8 @@ function mpHitPlayer(r, d, h, anySide) { /* called by game code when local playe
     /* Store stance for prone display in 2v2 */
     r.stance = (mpMode.id === '2v2') ? 2 : 0;
     paintTag(r, true);
-    try { lbc.raiseEvent(EV.DEATH, { n: actorName(r), k: mpName(), s: r.side }, { targetActors: [nr] }); } catch (e) {}
+    /* Send death event with killer's side (who won the fight) */
+    try { lbc.raiseEvent(EV.DEATH, { n: actorName(r), k: mpName(), s: side, vs: r.side }, { targetActors: [nr] }); } catch (e) {}
   } else {
     try { lbc.raiseEvent(EV.HIT, { d: Math.round(d), h: h ? 1 : 0, k: mpName(), s: side }, { targetActors: [nr] }); } catch (e) {}
   }
@@ -500,7 +501,7 @@ function mpStartMatch() {
   }, 100);
 }
 
-function mpCheckElimination() {
+function mpCheckElimination(victimSide) {
   if (!MP.active || !MP.match || mpRoundOver) return;
   const aliveA = (hp > 0 ? 1 : 0) + rpl.filter(r => r.side === 'A' && r.hp > 0).length;
   const aliveD = rpl.filter(r => r.side === 'D' && r.hp > 0).length;
@@ -532,8 +533,8 @@ function mpDie() {
   ads = false; reload = 0; fireT = 0;
   try { if (rap) { rap = null; ropeOff(); } } catch (e) {}
   try { document.exitPointerLock(); } catch (e) {}
-  try { lbc.raiseEvent(EV.DEATH, { n: mpName(), k: k || 'Hostile', s: side }, {}); } catch (e) {}
-  mpCheckElimination();
+  try { lbc.raiseEvent(EV.DEATH, { n: mpName(), k: k || 'Hostile', s: side, vs: side }, {}); } catch (e) {}
+  mpCheckElimination(side);
 }
 
 /* ---------------- per-frame ---------------- */
