@@ -357,9 +357,16 @@ function onRound(c) {
     /* Reset all players for new round */
     rpl.forEach(r => { r.hp = 100; r.alive = true; r.stance = 0; r.g.visible = true; r.g.position.set(r.tx, r.ty, r.tz); paintTag(r, true); });
     hp = op ? op.hp : 100; stance = 0; eyeH = 1.6; mpProt = 0; mpKiller = null;
-    ovMode = 'select'; /* Ensure ovMode is set correctly */
-    showOv('select'); mpRenderPanel();
-    feed('Round ' + rnd + ' — deploy when ready');
+    /* Auto-start round, skip operator selection */
+    mpDeployed = {};
+    side = mySide;
+    op = opFor(side);
+    try { ren.domElement.requestPointerLock(); } catch (e) {}
+    startRound(); state = 'play'; $('ov').style.display = 'none';
+    mpDeployed[myNr()] = 1;
+    try { lbc.raiseEvent(EV.DEPLOY, { n: mpName() }, {}); } catch (e) {}
+    mpRenderPanel();
+    feed('Round ' + rnd + ' started');
   } else if (c.k === 'end') {
     mpScore = { A: c.sA != null ? c.sA : mpScore.A, D: c.sD != null ? c.sD : mpScore.D };
     mpRoundOver = true; mpShowEnd(c.w, c.r);
