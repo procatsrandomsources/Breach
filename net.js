@@ -8,7 +8,7 @@
 'use strict';
 const APPID = '18ded446-f4df-4ca3-aa64-9ec049865f76';
 const $ = id => document.getElementById(id);
-const EV = { STATE: 100, HIT: 101, FIRE: 102, BREACH: 103, CHAT: 104, VO: 105, VOA: 106, VOI: 107, HELLO: 108, ROUND: 109, DEPLOY: 110, ENDREQ: 111, DEATH: 113, HITACK: 114 };
+const EV = { STATE: 100, HIT: 101, FIRE: 102, BREACH: 103, CHAT: 104, VO: 105, VOA: 106, VOI: 107, HELLO: 108, ROUND: 109, DEPLOY: 110, ENDREQ: 111, DEATH: 113, HITACK: 114, COUNTDOWN: 115 };
 const CODECH = 'ABCDEFGHJKMNPQRSTUVWXYZ23456789';
 
 let lbc = null, conn = 'off', connNum = -1, sendT = 0, lobbyT = 0, mpTab = 'mp', regionIx = 0, everJoined = false;
@@ -22,7 +22,7 @@ const MODES = [
 let mpMode = MODES[3];
 if (S.mpMode) { const m = MODES.find(x => x.id === S.mpMode); if (m) mpMode = m; }
 let mySide = (S.mpSide === 'D' ? 'D' : 'A');
-let mpScore = { A: 0, D: 0 }, mpRoundOver = false, mpEndSent = false, mpDeployed = {}, mpKills = {};
+let mpScore = { A: 0, D: 0 }, mpRoundOver = false, mpEndSent = false, mpDeployed = {}, mpKills = {}, mpCountdown = 0;
 const vc = { on: false, stream: null, pcs: {}, els: {} };
 
 MP.match = false; MP.code = ''; MP.lobby = false;
@@ -236,6 +236,7 @@ function mpOnEvent(code, c, a) {
       mpCheckElimination();
       break;
     }
+    case EV.COUNTDOWN: onCountdown(c); break;
     case EV.VO: vcOnOffer(c, a); break;
     case EV.VOA: vcOnAnswer(c, a); break;
     case EV.VOI: vcOnIce(c, a); break;
@@ -335,6 +336,17 @@ function mpRoundEnd(ws, reason) {
   try { lbc.raiseEvent(EV.ROUND, ev, {}); } catch (e) {}
   mpShowEnd(ws, reason);
 }
+
+function onCountdown(c) {
+  if (!c || !c.cd) return;
+  const cdEl = $('mpcd');
+  if (!cdEl) return;
+  if (c.cd > 0) {
+    cdEl.textContent = c.cd;
+  } else {
+    cdEl.textContent = 'GO!';
+  }
+}
 function onRound(c) {
   if (!c) return;
   if (c.k === 'start') {
@@ -361,12 +373,38 @@ function mpShowEnd(ws, reason) {
   $('ovb').innerHTML = 'Round ' + rnd + ' · ' + esc(reason || '') +
     '<br><br><b>MATCH SCORE:</b> Attackers <b>' + mpScore.A + '</b> — <b>' + mpScore.D + '</b> Defenders' +
     '<br><b>Leading:</b> ' + winningTeam +
-    (last ? '<br><br><b>MATCH OVER</b>' : '<br><br>Next round starting soon…');
+    (last ? '<br><br><b>MATCH OVER</b>' : '<br><br><div id="mpcd" style="font-size:48px;font-weight:700;color:var(--hud)">5</div>');
   $('ops').innerHTML = ''; $('maps').innerHTML = ''; $('ld').innerHTML = ''; $('scope').style.display = 'none';
-  const g = $('go'); g.disabled = false;
-  if (isHost()) { g.textContent = last ? 'Back to lobby' : 'Next round'; }
-  else { g.textContent = 'Waiting for host…'; g.disabled = true; }
+  const g = $('go'); g.style.display = 'none'; /* Hide deploy button */
   ovMode = 'mpresult'; $('ov').style.display = 'flex';
+
+  if (!last && isHost()) {
+    /* Start countdown for next round */
+    mpCountdown = 5;
+    const cdInt = setInterval(() => {
+      const cdEl = $('mpcd');
+      if (!cdEl) { clearInterval(cdInt); return; }
+      mpCountdown--;
+      if (mpCountdown > 0) {
+        cdEl.textContent = mpCountdown;
+        try { lbc.raiseEvent(EV.COUNTDOWN, { cd: mpCountdown }, {}); } catch (e) {}
+      } else {
+        clearInterval(cdInt);
+        cdEl.textContent = 'GO!';
+        try { lbc.raiseEvent(EV.COUNTDOWN, { cd: 0 }, {}); } catch (e) {}
+        setTimeout(() => {
+          rnd++;
+          mpBroadcastStart(rnd);
+        }, 500);
+      }
+    }, 1000);
+  } else if (last && isHost()) {
+    /* Match over, show back to lobby after delay */
+    setTimeout(() => {
+      mpBroadcast({ k: 'lobby' });
+      mpToLobby();
+    }, 3000);
+  }
 }
 function mpToLobby() {
   MP.match = false; MP.lobby = true; mpRoundOver = false; mpEndSent = false; mpDeployed = {};
@@ -385,11 +423,8 @@ function mpGo() {
     startRound(); state = 'play'; $('ov').style.display = 'none';
     mpDeployed[myNr()] = 1;
     try { lbc.raiseEvent(EV.DEPLOY, { n: mpName() }, {}); } catch (e) {}
-  } else if (ovMode === 'mpresult' && isHost()) {
-    const last = (rnd >= 6) || (mpScore.A >= 4 || mpScore.D >= 4);
-    if (last) { mpBroadcast({ k: 'lobby' }); mpToLobby(); }
-    else { rnd++; mpBroadcastStart(rnd); }
   }
+  /* Removed mpresult handling - countdown auto-starts next round */
 }
 function mpBroadcastStart(r) {
   const map = MP.map == null ? MAPI : MP.map;
