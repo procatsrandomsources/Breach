@@ -696,7 +696,7 @@ function end(win,t){state='end';document.exitPointerLock();$('ovt').textContent=
 function dmg(b,d,hs){b.hp-=d;b.seen=3;const h=$('hm');h.style.opacity=1;h.style.borderColor=b.hp<=0?'#d7263d':hmc();setTimeout(()=>h.style.opacity=0,120);
  if(b.hp<=0){b.alive=false;scene.remove(b.g);kills++;earn(5);msg(hs?KM[1]:KM[0]);snd(300,.2,'triangle',.15,-200);hitSnd(hs,1);killFx(b);const eb=MP.match?bots.filter(x=>x.side!==side):bots;if(eb.length&&eb.every(x=>!x.alive))end(true,'All enemies eliminated.')}else hitSnd(hs)}
 let rcN=0,rcT=0;
-function fire(){if(ammo<=0||reload>0||fireT>0||gdExt)return;if(MP.active&&MP.match&&hp<=0)return;ammo--;fireT=W.rof;
+function fire(){if(ammo<=0||reload>0||fireT>0||gdExt)return;if(MP.active&&MP.match&&hp<=0)return;if(state==='prep')return;ammo--;fireT=W.rof;
  {const now=performance.now();if(now-rcT>350)rcN=0;rcT=now;rcN++;const m=(ads?.6:1)*(stance===2?.55:stance===1?.8:1)*W.rec*(S.rcs==null?.4:S.rcs)*(GP.on?.7:1),n=Math.min(rcN,14);
   kick=Math.min(26,kick+(ads?1.6:3.2)*W.rec*(S.rcs==null?.4:S.rcs)*(GP.on?.7:1));pitch=Math.min(1.45,pitch+.011*m*(1+n*.07));
   yaw+=(Math.sin(rcN*.85)*.55+(Math.random()-.5)*.9)*.006*m*(1+n*.05);if(S.shk)shake=Math.max(shake,.06*W.rec*(S.rcs==null?.4:S.rcs)*(GP.on?.7:1))}
@@ -731,6 +731,7 @@ function botAI(b,dt){const K=S.bs==null?1.5:S.bs;if(b.stun>0){b.stun-=dt;b.cd=Ma
  b.cd-=dt;if(see&&b.cd<=0){b.bs=(b.bs||0)+1;b.cd=(b.bs%4===0?.6+Math.random()*.4:.2+Math.random()*.16)/K*1.2;snd(140,.1,'square',.07,-80);b.fl=.06;b.fm.visible=true;
   if(Math.random()<Math.max(.15,.62-d*.012)*(.6+.25*K)*(T.nr?.8:(op.sh?(ads?1.3:1):(ads?.85:1)))*(stance===2?.6:stance===1?.85:1)){const dd=(7+Math.random()*6)*(.85+.1*K);if(T.nr)mpBotShot(T.nr,dd);else if(mpProt<=0){hp-=dd*shf(p)*(gdB.arm>0?.7:1);$('dmg').style.opacity=1;shake=.12}}}}
 function update(dt){if(prep>0){prep-=dt;if(prep<=0){prep=0;msg('ACTION PHASE');snd(600,.15,'square',.1,0)}}else time-=dt;const drn=prep>0&&side==='A';dmode=drn;if(drn)ads=false;if(insp>0&&(ads||reload>0||down))insp=0;const C=drn?Dr:P;if(time<=0)return end(side==='D',side==='D'?'You held the line.':'Time expired.');
+ if(state==='prep')return; /* Prep phase: no movement, only look around */
  if(stance&&keys.ShiftLeft&&keys.KeyW&&!ads)stance=0;const sp=(ads?.5:(keys.ShiftLeft&&!stance?1.5:1))*op.spd*W.mv*(gdB.spd>0?1.35:1)*(gdExt?.55:1)*(stance===2?.22:stance===1?.55:1);let fx=0,fz=0;
  if(keys.KeyW)fz-=1;if(keys.KeyS)fz+=1;if(keys.KeyA)fx-=1;if(keys.KeyD)fx+=1;if(GP.mx||GP.mz){fx=GP.mx;fz=GP.mz}const l=Math.max(1,Math.hypot(fx,fz));fx=fx/l*sp*dt;fz=fz/l*sp*dt;
  const mx=Math.cos(yaw)*fx+Math.sin(yaw)*fz,mz=-Math.sin(yaw)*fx+Math.cos(yaw)*fz;if(drn){const sv=P.clone();P.copy(Dr);mv(mx*.7,mz*.7);Dr.copy(P);P.copy(sv)}else if(!rap)mv(HPOn?mx*2:mx,HPOn?mz*2:mz);else{rap.mx=mx;rap.mz=mz}
@@ -973,7 +974,7 @@ $('mmain').addEventListener('click',e=>{const o=e.target.closest('[data-op]');if
  const l=e.target.closest('[data-ls]');if(l){LDS=l.dataset.ls;renderMenu('load')}});
 $('mmain').addEventListener('change',e=>{const t=e.target.dataset;if(!t||(!t.w&&!t.a))return;const L=S.ld=S.ld||{};if(t.w)L[t.w]=e.target.value;else{const k=t.a[0];(L[k+'a']=L[k+'a']||{})[t.a[1]]=e.target.value}save();renderMenu('load')});
 let last=performance.now();
-let fr=0;function loop(n){requestAnimationFrame(loop);const dt=Math.min(.05,(n-last)/1000);last=n;gTick(dt);gpPoll(dt);if(state==='play'){update(dt);if(GP.on)gpPrompt()}cosUpd(dt,n);sky.position.copy(cam.position);dev.material.emissiveIntensity=.55+.4*Math.sin(n/260);if(QS.sh)ren.shadowMap.needsUpdate=(fr++%QS.su)===0;ren.render(scene,cam);hpDraw()}
+let fr=0;function loop(n){requestAnimationFrame(loop);const dt=Math.min(.05,(n-last)/1000);last=n;gTick(dt);gpPoll(dt);if(state==='play'||state==='prep'){update(dt);if(GP.on)gpPrompt()}cosUpd(dt,n);sky.position.copy(cam.position);dev.material.emissiveIntensity=.55+.4*Math.sin(n/260);if(QS.sh)ren.shadowMap.needsUpdate=(fr++%QS.su)===0;ren.render(scene,cam);hpDraw()}
 /* ---- hidden easter eggs (Original map only). Progress is saved in S.eggs ---- */
 const EGGN=6,EG={ufo:null,ut:0,vc:0,spin:0,couch:0,seq:0,seqT:0,ly:0};
 S.eggs=S.eggs||[];
