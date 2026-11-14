@@ -641,6 +641,7 @@ gTick = function (dt) { _gt(dt); mpTick(dt); };
   vb.onclick = () => vcToggle();
   setInterval(() => { vb.style.display = (MP.active && state === 'play') ? 'block' : 'none'; vb.classList.toggle('on', vc.on); }, 500);
   const mb = document.createElement('button'); mb.dataset.t = 'mp'; mb.textContent = 'Multiplayer';
+  mb.onclick = () => { renderMenu('mp'); };
   const pl = $('pl'); if (pl && pl.nextSibling) $('mside').insertBefore(mb, pl.nextSibling); else $('mside').appendChild(mb);
   $('mmain').addEventListener('click', e => { const d = e.target.dataset; if (d && d.mp) mpAction(d.mp); });
 })();
