@@ -354,9 +354,7 @@ function onRound(c) {
     if (c.mode) { const mo = MODES.find(m => m.id === c.mode); if (mo) mpMode = mo; }
     MP.match = true; MP.lobby = false; mpRoundOver = false; mpEndSent = false; mpDeployed = {};
     mpRevealed = {}; /* Reset reveal tracking */
-    /* Switch sides every 2 rounds in multiplayer */
-    side = (Math.ceil(rnd / 2) % 2 === 0) ? 'A' : 'D';
-    mySide = side;
+    mySide = (S.mpSide === 'D' ? 'D' : 'A'); side = mySide;
     /* Reset all players for new round */
     rpl.forEach(r => {
       r.hp = 100; r.alive = true; r.stance = 0; r.revealed = false;
@@ -369,8 +367,8 @@ function onRound(c) {
     op = opFor(side);
 
     if (rnd === 1) {
-      /* First round: 30s prep phase with operator selection (look only, no movement) */
-      mpPrepTimer = 30;
+      /* First round: 10s prep phase with operator selection (look only, no movement) */
+      mpPrepTimer = 10;
       window.mpPrepTimer = mpPrepTimer;
       mpDeployed = {};
       try { ren.domElement.requestPointerLock(); } catch (e) {}
