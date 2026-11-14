@@ -354,7 +354,9 @@ function onRound(c) {
     if (c.mode) { const mo = MODES.find(m => m.id === c.mode); if (mo) mpMode = mo; }
     MP.match = true; MP.lobby = false; mpRoundOver = false; mpEndSent = false; mpDeployed = {};
     mpRevealed = {}; /* Reset reveal tracking */
-    mySide = (S.mpSide === 'D' ? 'D' : 'A'); side = mySide;
+    /* Switch sides every 2 rounds in multiplayer */
+    side = (Math.ceil(rnd / 2) % 2 === 0) ? 'A' : 'D';
+    mySide = side;
     /* Reset all players for new round */
     rpl.forEach(r => {
       r.hp = 100; r.alive = true; r.stance = 0; r.revealed = false;
@@ -364,39 +366,50 @@ function onRound(c) {
       paintTag(r, true);
     });
     hp = op ? op.hp : 100; stance = 0; eyeH = 1.6; mpProt = 0; mpKiller = null;
-    side = mySide;
     op = opFor(side);
 
-    /* Every round: 30s prep phase with operator selection (look only, no movement) */
-    mpPrepTimer = 30;
-    window.mpPrepTimer = mpPrepTimer;
-    mpDeployed = {};
-    try { ren.domElement.requestPointerLock(); } catch (e) {}
-    startRound(); state = 'prep'; /* Prep state - can only look around */
-    ovMode = 'select';
-    showOv('select');
-    $('ov').style.display = 'flex'; /* Ensure overlay is visible during prep */
-    mpDeployed[myNr()] = 1;
-    try { lbc.raiseEvent(EV.DEPLOY, { n: mpName() }, {}); } catch (e) {}
-    mpRenderPanel();
-    feed('Round ' + rnd + ' — Prep phase: ' + mpPrepTimer + 's');
-    const prepInt = setInterval(() => {
-      if (!MP.active || !MP.match) { clearInterval(prepInt); return; }
-      mpPrepTimer--;
+    if (rnd === 1) {
+      /* First round: 30s prep phase with operator selection (look only, no movement) */
+      mpPrepTimer = 30;
       window.mpPrepTimer = mpPrepTimer;
-      if (mpPrepTimer > 0) {
-        const cdEl = $('mpcd');
-        if (cdEl) cdEl.textContent = mpPrepTimer;
-        showOv('select'); /* Refresh to update countdown */
-        msg('Prep phase: ' + mpPrepTimer + 's');
-      } else {
-        clearInterval(prepInt);
-        window.mpPrepTimer = 0;
-        state = 'play'; /* Transition to actual play */
-        $('ov').style.display = 'none';
-        feed('Round ' + rnd + ' started');
-      }
-    }, 1000);
+      mpDeployed = {};
+      try { ren.domElement.requestPointerLock(); } catch (e) {}
+      startRound(); state = 'prep'; /* Prep state - can only look around */
+      ovMode = 'select';
+      showOv('select');
+      $('ov').style.display = 'flex';
+      mpDeployed[myNr()] = 1;
+      try { lbc.raiseEvent(EV.DEPLOY, { n: mpName() }, {}); } catch (e) {}
+      mpRenderPanel();
+      feed('Round ' + rnd + ' — Prep phase: ' + mpPrepTimer + 's');
+      const prepInt = setInterval(() => {
+        if (!MP.active || !MP.match) { clearInterval(prepInt); return; }
+        mpPrepTimer--;
+        window.mpPrepTimer = mpPrepTimer;
+        if (mpPrepTimer > 0) {
+          const cdEl = $('mpcd');
+          if (cdEl) cdEl.textContent = mpPrepTimer;
+          showOv('select');
+          msg('Prep phase: ' + mpPrepTimer + 's');
+        } else {
+          clearInterval(prepInt);
+          window.mpPrepTimer = 0;
+          state = 'play';
+          $('ov').style.display = 'none';
+          feed('Round ' + rnd + ' started');
+        }
+      }, 1000);
+    } else {
+      /* Subsequent rounds: auto-start immediately */
+      mpDeployed = {};
+      try { ren.domElement.requestPointerLock(); } catch (e) {}
+      startRound(); state = 'play';
+      $('ov').style.display = 'none';
+      mpDeployed[myNr()] = 1;
+      try { lbc.raiseEvent(EV.DEPLOY, { n: mpName() }, {}); } catch (e) {}
+      mpRenderPanel();
+      feed('Round ' + rnd + ' started');
+    }
   } else if (c.k === 'end') {
     mpScore = { A: c.sA != null ? c.sA : mpScore.A, D: c.sD != null ? c.sD : mpScore.D };
     mpRoundOver = true; mpShowEnd(c.w, c.r);
