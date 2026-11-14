@@ -159,12 +159,20 @@ function ensureRp(nr) {
   const head = new THREE.Mesh(new THREE.SphereGeometry(.17, 24, 16), SKIN); head.position.y = 1.72;
   const legs = new THREE.Mesh(new THREE.BoxGeometry(.4, .45, .25), M(0x2a2a2e)); legs.position.y = .22;
   g.add(body, head, legs);
+  /* Add collider visualization (wireframe box) */
+  const collider = new THREE.Mesh(
+    new THREE.BoxGeometry(.6, 1.8, .4),
+    new THREE.MeshBasicMaterial({ color: 0xff0000, wireframe: true, transparent: true, opacity: 0 })
+  );
+  collider.position.y = .9;
+  collider.visible = false;
+  g.add(collider);
   const cv = document.createElement('canvas'); cv.width = 256; cv.height = 64;
   const ctx = cv.getContext('2d');
   const tex = new THREE.CanvasTexture(cv); tex.minFilter = THREE.LinearFilter;
   const sp = new THREE.Sprite(new THREE.SpriteMaterial({ map: tex, depthTest: true, depthWrite: false }));
   sp.scale.set(1.7, .43, 1); sp.position.y = 2.15; sp.renderOrder = 5; g.add(sp);
-  r = { nr, name: 'P' + nr, side: 'A', hp: 100, alive: true, isRP: true, g, body, head, ctx, tex, sp, lhp: -1, lname: '', tx: 0, ty: 1.6, tz: 22, tyaw: 0, stance: 0 };
+  r = { nr, name: 'P' + nr, side: 'A', hp: 100, alive: true, isRP: true, g, body, head, legs, collider, ctx, tex, sp, lhp: -1, lname: '', tx: 0, ty: 1.6, tz: 22, tyaw: 0, stance: 0 };
   body.userData = { rp: r }; head.userData = { rp: r, head: 1 };
   g.visible = false; g.position.set(0, 1.6, 22); scene.add(g);
   rpl.push(r); paintTag(r, true); return r;
@@ -336,7 +344,8 @@ function onRound(c) {
     mySide = (S.mpSide === 'D' ? 'D' : 'A'); side = mySide;
     /* Reset all players for new round */
     rpl.forEach(r => { r.hp = 100; r.alive = true; r.stance = 0; r.g.visible = true; r.g.position.set(r.tx, r.ty, r.tz); paintTag(r, true); });
-    hp = op ? op.hp : 100; stance = 0; mpProt = 0; mpKiller = null;
+    hp = op ? op.hp : 100; stance = 0; eyeH = 1.6; mpProt = 0; mpKiller = null;
+    ovMode = 'select'; /* Ensure ovMode is set correctly */
     showOv('select'); mpRenderPanel();
     feed('Round ' + rnd + ' — deploy when ready');
   } else if (c.k === 'end') {
@@ -347,10 +356,12 @@ function onRound(c) {
 function mpShowEnd(ws, reason) {
   state = 'end'; try { document.exitPointerLock(); } catch (e) {}
   const last = (rnd >= 6) || (mpScore.A >= 4 || mpScore.D >= 4);
+  const winningTeam = mpScore.A > mpScore.D ? 'ATTACKERS' : (mpScore.D > mpScore.A ? 'DEFENDERS' : 'TIED');
   $('ovt').textContent = (ws === 'A' ? 'ATTACKERS' : 'DEFENDERS') + ' WIN' + (ws === side ? ' — YOUR SIDE' : '');
   $('ovb').innerHTML = 'Round ' + rnd + ' · ' + esc(reason || '') +
-    '<br>Attackers <b>' + mpScore.A + '</b> — <b>' + mpScore.D + '</b> Defenders' +
-    (last ? '<br><b>MATCH OVER</b>' : '<br>Next round starting soon…');
+    '<br><br><b>MATCH SCORE:</b> Attackers <b>' + mpScore.A + '</b> — <b>' + mpScore.D + '</b> Defenders' +
+    '<br><b>Leading:</b> ' + winningTeam +
+    (last ? '<br><br><b>MATCH OVER</b>' : '<br><br>Next round starting soon…');
   $('ops').innerHTML = ''; $('maps').innerHTML = ''; $('ld').innerHTML = ''; $('scope').style.display = 'none';
   const g = $('go'); g.disabled = false;
   if (isHost()) { g.textContent = last ? 'Back to lobby' : 'Next round'; }
@@ -420,8 +431,9 @@ function mpDie() {
   feed(k ? (k + ' eliminated you') : 'You were eliminated');
   msg('ELIMINATED — SPECTATING');
   hp = 0;
-  /* Show prone position when dead in 2v2 */
+  /* Show prone position when dead in 2v2, and show collider */
   stance = (mpMode.id === '2v2') ? 2 : 0;
+  eyeH = (mpMode.id === '2v2') ? 0.35 : 1.6; /* Lower camera for prone */
   ads = false; reload = 0; fireT = 0;
   try { if (rap) { rap = null; ropeOff(); } } catch (e) {}
   try { document.exitPointerLock(); } catch (e) {}
@@ -440,13 +452,25 @@ function mpTick(dt) {
     p.x += (r.tx - p.x) * k; p.y += (r.ty - p.y) * k; p.z += (r.tz - p.z) * k;
     let dy = r.tyaw - r.g.rotation.y; dy = Math.atan2(Math.sin(dy), Math.cos(dy));
     r.g.rotation.y += dy * Math.min(1, dt * 10);
-    /* Adjust body rotation for prone stance when dead in 2v2 */
+    /* Adjust body rotation for prone stance when dead in 2v2, show collider */
     if (r.hp <= 0 && mpMode.id === '2v2') {
       r.body.rotation.x = Math.PI / 2; /* Lie flat */
       r.head.position.y = 0.35; /* Lower head */
+      r.legs.position.y = -0.3; /* Lower legs */
+      if (r.collider) {
+        r.collider.visible = true;
+        r.collider.rotation.x = Math.PI / 2;
+        r.collider.position.y = 0.35;
+      }
     } else {
       r.body.rotation.x = 0;
       r.head.position.y = 1.72;
+      r.legs.position.y = .22;
+      if (r.collider) {
+        r.collider.visible = false;
+        r.collider.rotation.x = 0;
+        r.collider.position.y = .9;
+      }
     }
     paintTag(r);
   }
