@@ -1,7 +1,7 @@
 <!DOCTYPE html>
 <html lang="en"><head><meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
-<title>Breach Protocol: 3D Tactical FPS</title>
+<title>Breach Protocol</title>
 <link href="https://fonts.googleapis.com/css2?family=Barlow+Condensed:wght@500;700&display=swap" rel="stylesheet">
 <style>
 :root{--ink:#e8e4d8;--hud:#f2b705;--bad:#d7263d;--panel:rgba(14,16,14,.78)}
@@ -795,7 +795,8 @@ function startRound(){leanTg=false;leanT=0;sbToggle(false);HPOn=false;$("hpt").s
 function showOv(m){ovMode=m;$('scope').style.display='none';$('ov').style.display='flex';const o=$('ops');o.innerHTML='';const mp=$('maps');mp.innerHTML='';if(m==='select'&&rnd===1)MAPS.forEach((x,i)=>{const d=document.createElement('div');d.className='op'+(i===MAPI?' sel':'');d.innerHTML='<b>'+x.n+'</b><br><small>'+x.d+'</small>';d.onclick=()=>{MAPI=i;showOv('select')};mp.appendChild(d)});
  if(m!=='select')return;op=opFor(side);
  $('ovt').textContent='ROUND '+rnd+' · '+(side==='A'?'ATTACKING':'DEFENDING');
- $('ovb').innerHTML=side==='A'?'Breach the yellow walls, clear the defenders and <b>defuse the device</b> (the red device). Press <b>T</b> at the outside of the building to rappel to the roof and charge the <b>hatch</b>. Bullets punch through yellow walls and hatches at reduced damage. Pick an operator.':'Hold the building and <b>stop the attackers</b> from defusing the device. Pick an operator.';
+ const prepText = (typeof mpPrepTimer !== 'undefined' && mpPrepTimer > 0) ? '<br><br><div id="mpcd" style="font-size:48px;font-weight:700;color:var(--hud)">'+mpPrepTimer+'</div>' : '';
+ $('ovb').innerHTML=side==='A'?'Breach the yellow walls, clear the defenders and <b>defuse the device</b> (the red device). Press <b>T</b> at the outside of the building to rappel to the roof and charge the <b>hatch</b>. Bullets punch through yellow walls and hatches at reduced damage. Pick an operator.'+prepText:'Hold the building and <b>stop the attackers</b> from defusing the device. Pick an operator.'+prepText;
  OPS.filter(x=>x.s===side).forEach(x=>{const d=document.createElement('div');d.className='op'+(x===op?' sel':'');d.innerHTML='<b>'+x.n+'</b><br>'+x.w+'<br><small>'+x.ab+' · HP '+x.hp+'</small>';d.onclick=()=>{saveOp(x);showOv('select')};o.appendChild(d)});$('go').textContent='Deploy';ldUI()}
 function end(win,t){if(state==='end')return;state='end';document.exitPointerLock();if(win){sc++;earn(20)}const last=rnd>=6;
  $('ovt').textContent=win?'ROUND WON':'ROUND LOST';

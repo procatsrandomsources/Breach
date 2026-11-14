@@ -22,7 +22,7 @@ const MODES = [
 let mpMode = MODES[3];
 if (S.mpMode) { const m = MODES.find(x => x.id === S.mpMode); if (m) mpMode = m; }
 let mySide = (S.mpSide === 'D' ? 'D' : 'A');
-let mpScore = { A: 0, D: 0 }, mpRoundOver = false, mpEndSent = false, mpDeployed = {}, mpKills = {}, mpCountdown = 0;
+let mpScore = { A: 0, D: 0 }, mpRoundOver = false, mpEndSent = false, mpDeployed = {}, mpKills = {}, mpCountdown = 0, mpRevealed = {}, mpPrepTimer = 0;
 const vc = { on: false, stream: null, pcs: {}, els: {} };
 
 MP.match = false; MP.code = ''; MP.lobby = false;
@@ -172,7 +172,7 @@ function ensureRp(nr) {
   const tex = new THREE.CanvasTexture(cv); tex.minFilter = THREE.LinearFilter;
   const sp = new THREE.Sprite(new THREE.SpriteMaterial({ map: tex, depthTest: true, depthWrite: false }));
   sp.scale.set(1.7, .43, 1); sp.position.y = 2.15; sp.renderOrder = 5; g.add(sp);
-  r = { nr, name: 'P' + nr, side: 'A', hp: 100, alive: true, isRP: true, g, body, head, legs, collider, ctx, tex, sp, lhp: -1, lname: '', tx: 0, ty: 1.6, tz: 22, tyaw: 0, stance: 0 };
+  r = { nr, name: 'P' + nr, side: 'A', hp: 100, alive: true, isRP: true, g, body, head, legs, collider, ctx, tex, sp, lhp: -1, lname: '', tx: 0, ty: 1.6, tz: 22, tyaw: 0, stance: 0, revealed: false };
   body.userData = { rp: r }; head.userData = { rp: r, head: 1 };
   g.visible = false; g.position.set(0, 1.6, 22); scene.add(g);
   rpl.push(r); paintTag(r, true); return r;
@@ -353,20 +353,49 @@ function onRound(c) {
     rnd = c.rnd || 1; MAPI = c.map || 0; mpScore = { A: c.sA || 0, D: c.sD || 0 };
     if (c.mode) { const mo = MODES.find(m => m.id === c.mode); if (mo) mpMode = mo; }
     MP.match = true; MP.lobby = false; mpRoundOver = false; mpEndSent = false; mpDeployed = {};
+    mpRevealed = {}; /* Reset reveal tracking */
     mySide = (S.mpSide === 'D' ? 'D' : 'A'); side = mySide;
     /* Reset all players for new round */
-    rpl.forEach(r => { r.hp = 100; r.alive = true; r.stance = 0; r.g.visible = true; r.g.position.set(r.tx, r.ty, r.tz); paintTag(r, true); });
+    rpl.forEach(r => {
+      r.hp = 100; r.alive = true; r.stance = 0; r.revealed = false;
+      r.g.visible = true; r.g.position.set(r.tx, r.ty, r.tz);
+      r.body.rotation.x = 0; r.head.position.y = 1.72; r.legs.position.y = .22;
+      if (r.collider) { r.collider.visible = false; r.collider.rotation.x = 0; r.collider.position.y = .9; }
+      paintTag(r, true);
+    });
     hp = op ? op.hp : 100; stance = 0; eyeH = 1.6; mpProt = 0; mpKiller = null;
-    /* Auto-start round, skip operator selection */
-    mpDeployed = {};
-    side = mySide;
-    op = opFor(side);
-    try { ren.domElement.requestPointerLock(); } catch (e) {}
-    startRound(); state = 'play'; $('ov').style.display = 'none';
-    mpDeployed[myNr()] = 1;
-    try { lbc.raiseEvent(EV.DEPLOY, { n: mpName() }, {}); } catch (e) {}
+    /* Show operator selection with 30s countdown */
+    mpPrepTimer = 30;
+    window.mpPrepTimer = mpPrepTimer; /* Expose to global scope for HTML */
+    ovMode = 'select';
+    showOv('select');
     mpRenderPanel();
-    feed('Round ' + rnd + ' started');
+    feed('Round ' + rnd + ' — 30s to select operator');
+    /* Start prep countdown */
+    const prepInt = setInterval(() => {
+      if (!MP.active || !MP.match || state !== 'menu') { clearInterval(prepInt); return; }
+      mpPrepTimer--;
+      window.mpPrepTimer = mpPrepTimer;
+      if (mpPrepTimer > 0) {
+        const cdEl = $('mpcd');
+        if (cdEl) cdEl.textContent = mpPrepTimer;
+        showOv('select'); /* Refresh to update countdown display */
+        feed('Round starting in ' + mpPrepTimer + 's');
+      } else {
+        clearInterval(prepInt);
+        window.mpPrepTimer = 0;
+        /* Auto-deploy */
+        mpDeployed = {};
+        side = mySide;
+        op = opFor(side);
+        try { ren.domElement.requestPointerLock(); } catch (e) {}
+        startRound(); state = 'play'; $('ov').style.display = 'none';
+        mpDeployed[myNr()] = 1;
+        try { lbc.raiseEvent(EV.DEPLOY, { n: mpName() }, {}); } catch (e) {}
+        mpRenderPanel();
+        feed('Round ' + rnd + ' started');
+      }
+    }, 1000);
   } else if (c.k === 'end') {
     mpScore = { A: c.sA != null ? c.sA : mpScore.A, D: c.sD != null ? c.sD : mpScore.D };
     mpRoundOver = true; mpShowEnd(c.w, c.r);
@@ -415,8 +444,14 @@ function mpShowEnd(ws, reason) {
 }
 function mpToLobby() {
   MP.match = false; MP.lobby = true; mpRoundOver = false; mpEndSent = false; mpDeployed = {};
-  rpl.forEach(r => { r.g.visible = false; r.hp = 100; r.alive = true; paintTag(r, true); });
-  hp = op ? op.hp : 100; mpProt = 0; mpKiller = null;
+  mpRevealed = {}; /* Reset reveal tracking */
+  rpl.forEach(r => {
+    r.g.visible = false; r.hp = 100; r.alive = true; r.revealed = false;
+    r.body.rotation.x = 0; r.head.position.y = 1.72; r.legs.position.y = .22;
+    if (r.collider) { r.collider.visible = false; r.collider.rotation.x = 0; r.collider.position.y = .9; }
+    paintTag(r, true);
+  });
+  hp = op ? op.hp : 100; stance = 0; eyeH = 1.6; mpProt = 0; mpKiller = null;
   state = 'menu'; try { document.exitPointerLock(); } catch (e) {}
   openMenu(); renderMenu('mp'); feed('Back to lobby');
 }
@@ -441,10 +476,16 @@ function mpBroadcastStart(r) {
 function mpStartMatch() {
   if (!isHost()) { feed('Only the host can start'); return; }
   rnd = 1; mpScore = { A: 0, D: 0 };
+  mpRevealed = {}; /* Reset reveal tracking */
   const map = MP.map == null ? MAPI : MP.map;
   const ev = { k: 'start', rnd: 1, map, sA: 0, sD: 0, mode: mpMode.id };
   try { lbc.myRoom().setMaxPlayers(mpMode.max); } catch (e) {}
   mpBroadcast(ev); onRound(ev);
+  /* Auto-click play button */
+  setTimeout(() => {
+    const plBtn = $('pl');
+    if (plBtn) plBtn.click();
+  }, 100);
 }
 
 function mpCheckElimination() {
@@ -514,7 +555,36 @@ function mpTick(dt) {
         r.collider.position.y = .9;
       }
     }
+    /* Check if defender is outside building */
+    if (r.side === 'D' && r.hp > 0) {
+      const outside = Math.abs(p.x) > 12 || Math.abs(p.z) > 8;
+      if (outside) {
+        if (!mpRevealed[r.nr]) mpRevealed[r.nr] = 0;
+        mpRevealed[r.nr] += dt;
+        if (mpRevealed[r.nr] >= 1.5 && !r.revealed) {
+          r.revealed = true;
+          feed(actorName(r) + ' revealed outside!');
+          try { lbc.raiseEvent(EV.STATE, curState(), {}); } catch (e) {}
+        }
+      } else {
+        mpRevealed[r.nr] = 0;
+        r.revealed = false;
+      }
+    }
     paintTag(r);
+  }
+  /* Check local player if defender */
+  if (side === 'D' && hp > 0) {
+    const outside = Math.abs(P.x) > 12 || Math.abs(P.z) > 8;
+    if (outside) {
+      if (!mpRevealed[myNr()]) mpRevealed[myNr()] = 0;
+      mpRevealed[myNr()] += dt;
+      if (mpRevealed[myNr()] >= 1.5) {
+        msg('REVEALED OUTSIDE');
+      }
+    } else {
+      mpRevealed[myNr()] = 0;
+    }
   }
   lobbyT -= dt;
   if (lobbyT <= 0) { lobbyT = 1; if (mpTab === 'mp' && $('menu') && $('menu').style.display !== 'none' && document.activeElement.tagName !== 'INPUT') mpRenderPanel(); }
