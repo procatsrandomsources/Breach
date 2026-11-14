@@ -1,0 +1,6 @@
+{
+  "dependencies": {
+    "@photonengine/realtime-core": "^6.0.2",
+    "photon-realtime": "^4.4.0"
+  }
+}
