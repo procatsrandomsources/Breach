@@ -334,7 +334,9 @@ function onRound(c) {
     if (c.mode) { const mo = MODES.find(m => m.id === c.mode); if (mo) mpMode = mo; }
     MP.match = true; MP.lobby = false; mpRoundOver = false; mpEndSent = false; mpDeployed = {};
     mySide = (S.mpSide === 'D' ? 'D' : 'A'); side = mySide;
-    rpl.forEach(r => { r.g.visible = true; r.g.position.set(r.tx, r.ty, r.tz); });
+    /* Reset all players for new round */
+    rpl.forEach(r => { r.hp = 100; r.alive = true; r.stance = 0; r.g.visible = true; r.g.position.set(r.tx, r.ty, r.tz); paintTag(r, true); });
+    hp = op ? op.hp : 100; stance = 0; mpProt = 0; mpKiller = null;
     showOv('select'); mpRenderPanel();
     feed('Round ' + rnd + ' — deploy when ready');
   } else if (c.k === 'end') {
