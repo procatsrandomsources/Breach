@@ -8,7 +8,7 @@
 'use strict';
 const APPID = '18ded446-f4df-4ca3-aa64-9ec049865f76';
 const $ = id => document.getElementById(id);
-const EV = { STATE: 100, HIT: 101, FIRE: 102, BREACH: 103, CHAT: 104, VO: 105, VOA: 106, VOI: 107, HELLO: 108, ROUND: 109, DEPLOY: 110, ENDREQ: 111, DEATH: 113 };
+const EV = { STATE: 100, HIT: 101, FIRE: 102, BREACH: 103, CHAT: 104, VO: 105, VOA: 106, VOI: 107, HELLO: 108, ROUND: 109, DEPLOY: 110, ENDREQ: 111, DEATH: 113, HITACK: 114 };
 const CODECH = 'ABCDEFGHJKMNPQRSTUVWXYZ23456789';
 
 let lbc = null, conn = 'off', connNum = -1, sendT = 0, lobbyT = 0, mpTab = 'mp', regionIx = 0, everJoined = false;
@@ -164,7 +164,7 @@ function ensureRp(nr) {
   const tex = new THREE.CanvasTexture(cv); tex.minFilter = THREE.LinearFilter;
   const sp = new THREE.Sprite(new THREE.SpriteMaterial({ map: tex, depthTest: true, depthWrite: false }));
   sp.scale.set(1.7, .43, 1); sp.position.y = 2.15; sp.renderOrder = 5; g.add(sp);
-  r = { nr, name: 'P' + nr, side: 'A', hp: 100, alive: true, isRP: true, g, body, head, ctx, tex, sp, lhp: -1, lname: '', tx: 0, ty: 1.6, tz: 22, tyaw: 0 };
+  r = { nr, name: 'P' + nr, side: 'A', hp: 100, alive: true, isRP: true, g, body, head, ctx, tex, sp, lhp: -1, lname: '', tx: 0, ty: 1.6, tz: 22, tyaw: 0, stance: 0 };
   body.userData = { rp: r }; head.userData = { rp: r, head: 1 };
   g.visible = false; g.position.set(0, 1.6, 22); scene.add(g);
   rpl.push(r); paintTag(r, true); return r;
@@ -179,12 +179,19 @@ function paintTag(r, force) {
   r.lhp = hpv; r.lname = r.name; r.lside = r.side;
   const c = r.ctx; c.clearRect(0, 0, 256, 64);
   c.font = '700 30px "Barlow Condensed", Arial, sans-serif'; c.textAlign = 'center';
-  c.lineWidth = 5; c.strokeStyle = '#000'; c.fillStyle = r.side === 'A' ? '#8fc0ff' : '#ff9d9d';
+  c.lineWidth = 5; c.strokeStyle = '#000';
+  if (hpv <= 0) c.fillStyle = '#555';
+  else c.fillStyle = r.side === 'A' ? '#8fc0ff' : '#ff9d9d';
   c.strokeText(r.name, 128, 34); c.fillText(r.name, 128, 34);
   c.fillStyle = '#000a'; c.fillRect(48, 42, 160, 12);
-  c.fillStyle = hpv > 50 ? '#7cfc00' : hpv > 25 ? '#f2b705' : '#d7263d';
-  c.fillRect(50, 44, 156 * Math.min(100, hpv) / 100, 8);
+  if (hpv > 0) {
+    c.fillStyle = hpv > 50 ? '#7cfc00' : hpv > 25 ? '#f2b705' : '#d7263d';
+    c.fillRect(50, 44, 156 * Math.min(100, hpv) / 100, 8);
+  } else {
+    c.fillStyle = '#d7263d'; c.fillRect(50, 44, 156, 8);
+  }
   r.tex.needsUpdate = true;
+  if (r.g) r.g.visible = hpv > 0;
 }
 function mpSideCount(s) { let n = (mySide === s) ? 1 : 0; for (const r of rpl) if (r.side === s) n++; return n; }
 
@@ -213,14 +220,21 @@ function mpOnEvent(code, c, a) {
     case EV.ROUND: onRound(c); break;
     case EV.DEPLOY: mpDeployed[a] = 1; mpRenderPanel(); break;
     case EV.ENDREQ: if (isHost() && !mpRoundOver) mpRoundEnd(c.w, c.r); break;
-    case EV.DEATH: feed((c.k || 'Someone') + ' eliminated ' + (c.n || 'a player')); mpKills[c.n] = (mpKills[c.n] || 0) + 1; mpCheckElimination(); break;
+    case EV.DEATH: {
+      feed((c.k || 'Someone') + ' eliminated ' + (c.n || 'a player'));
+      mpKills[c.n] = (mpKills[c.n] || 0) + 1;
+      const r = rpOf(a);
+      if (r) { r.hp = 0; r.alive = false; paintTag(r, true); }
+      mpCheckElimination();
+      break;
+    }
     case EV.VO: vcOnOffer(c, a); break;
     case EV.VOA: vcOnAnswer(c, a); break;
     case EV.VOI: vcOnIce(c, a); break;
   }
 }
 function curState() {
-  return [P.x, P.y - eyeH, P.z, yaw, pitch, Math.max(0, Math.ceil(hp)), stance, slot, Lv, mpProt > 0 ? 1 : 0, mySide, mpMode.id];
+  return [P.x, P.y - eyeH, P.z, yaw, pitch, Math.max(0, Math.ceil(hp)), stance, slot, Lv, mpProt > 0 ? 1 : 0, mySide, mpMode.id, hp <= 0 ? 2 : 0];
 }
 function mpSendState() {
   if (!MP.active || !lbc) return;
@@ -233,6 +247,13 @@ function onState(c, a) {
   r.hp = c[5] == null ? 100 : c[5]; r.alive = r.hp > 0;
   r.side = c[10] === 'D' ? 'D' : 'A';
   if (c[11]) r.mode = c[11];
+  /* If dead in 2v2, show prone stance */
+  if (r.hp <= 0 && mpMode.id === '2v2') {
+    r.stance = 2;
+    r.ty = c[1] - 1.25; /* Lower position for prone */
+  } else {
+    r.stance = 0;
+  }
   paintTag(r);
   if (MP.match && !r.g.visible) r.g.visible = true;
   const dx = r.tx - r.g.position.x, dz = r.tz - r.g.position.z;
@@ -241,10 +262,12 @@ function onState(c, a) {
 function onHit(c) {
   if (!MP.match || state !== 'play' || mpProt > 0) return;
   if (c.s && c.s === side) return; /* no friendly fire */
+  if (hp <= 0) return;
   hp -= (c.d || 0) * (gdB.arm > 0 ? .7 : 1);
   $('dmg').style.opacity = 1; shake = Math.max(shake, .12); mpKiller = c.k || null;
   snd(110, .14, 'sine', .3, -60);
-  if (hp <= 0) mpDie();
+  if (hp <= 0) { hp = 0; mpDie(); }
+  else try { lbc.raiseEvent(EV.HITACK, { hp: Math.round(hp) }, {}); } catch (e) {}
 }
 function mpHitPlayer(r, d, h, anySide) { /* called by game code when local player hits a remote */
   if (!MP.active || !r) return;
@@ -252,7 +275,15 @@ function mpHitPlayer(r, d, h, anySide) { /* called by game code when local playe
   const nr = r.nr != null ? r.nr : r;
   const hm = $('hm'); hm.style.opacity = 1; hm.style.borderColor = h ? '#d7263d' : hmc();
   setTimeout(() => hm.style.opacity = 0, 120); hitSnd(!!h, 0);
-  try { lbc.raiseEvent(EV.HIT, { d: Math.round(d), h: h ? 1 : 0, k: mpName(), s: side }, { targetActors: [nr] }); } catch (e) {}
+  if (r.hp > 0 && r.hp - d <= 0) {
+    r.hp = 0; r.alive = false;
+    /* Store stance for prone display in 2v2 */
+    r.stance = (mpMode.id === '2v2') ? 2 : 0;
+    paintTag(r, true);
+    try { lbc.raiseEvent(EV.DEATH, { n: actorName(r), k: mpName(), s: r.side }, { targetActors: [nr] }); } catch (e) {}
+  } else {
+    try { lbc.raiseEvent(EV.HIT, { d: Math.round(d), h: h ? 1 : 0, k: mpName(), s: side }, { targetActors: [nr] }); } catch (e) {}
+  }
 }
 function mpBotShot(nr, d) {
   try { lbc.raiseEvent(EV.HIT, { d: Math.round(d), h: 0, k: 'Bot' }, { targetActors: [nr] }); } catch (e) {}
@@ -326,7 +357,8 @@ function mpShowEnd(ws, reason) {
 }
 function mpToLobby() {
   MP.match = false; MP.lobby = true; mpRoundOver = false; mpEndSent = false; mpDeployed = {};
-  rpl.forEach(r => { r.g.visible = false; r.hp = 100; r.alive = true; });
+  rpl.forEach(r => { r.g.visible = false; r.hp = 100; r.alive = true; paintTag(r, true); });
+  hp = op ? op.hp : 100; mpProt = 0; mpKiller = null;
   state = 'menu'; try { document.exitPointerLock(); } catch (e) {}
   openMenu(); renderMenu('mp'); feed('Back to lobby');
 }
@@ -364,20 +396,33 @@ function mpCheckElimination() {
   if (!MP.active || !MP.match || mpRoundOver) return;
   const aliveA = (hp > 0 ? 1 : 0) + rpl.filter(r => r.side === 'A' && r.hp > 0).length;
   const aliveD = rpl.filter(r => r.side === 'D' && r.hp > 0).length;
-  if (aliveA === 0) mpRoundEnd('D', 'Attackers eliminated');
-  else if (aliveD === 0) mpRoundEnd('A', 'Defenders eliminated');
+  const totalA = 1 + rpl.filter(r => r.side === 'A').length;
+  const totalD = rpl.filter(r => r.side === 'D').length;
+  const modeId = mpMode.id;
+  /* Round ends when the ENTIRE team is eliminated */
+  if (modeId === '1v1') {
+    if (aliveA === 0) mpRoundEnd('D', 'Attacker eliminated');
+    else if (aliveD === 0) mpRoundEnd('A', 'Defender eliminated');
+  } else if (modeId === '2v2') {
+    if (aliveA === 0) mpRoundEnd('D', 'Attackers eliminated');
+    else if (aliveD === 0) mpRoundEnd('A', 'Defenders eliminated');
+  } else {
+    if (aliveA === 0) mpRoundEnd('D', 'Attackers eliminated');
+    else if (aliveD === 0) mpRoundEnd('A', 'Defenders eliminated');
+  }
 }
 
-/* death: instant respawn, spawn protection, kill feed, elimination check */
+/* death: elimination mode — no respawn, spectate until round ends */
 function mpDie() {
   const k = mpKiller || null; mpKiller = null;
   feed(k ? (k + ' eliminated you') : 'You were eliminated');
-  msg('ELIMINATED — RESPAWNING');
-  hp = op ? op.hp : 100; mpProt = 3; Lv = 0; stance = 0;
+  msg('ELIMINATED — SPECTATING');
+  hp = 0;
+  /* Show prone position when dead in 2v2 */
+  stance = (mpMode.id === '2v2') ? 2 : 0;
+  ads = false; reload = 0; fireT = 0;
   try { if (rap) { rap = null; ropeOff(); } } catch (e) {}
-  const off = ((myNr() % 5) - 2) * .9;
-  if (side === 'A') { P.set(off, 1.6, 22); Dr.set(off, .35, 20); yaw = 0; }
-  else { P.set(MAP.dsp[0] + off, 1.6, MAP.dsp[1]); yaw = Math.PI; }
+  try { document.exitPointerLock(); } catch (e) {}
   try { lbc.raiseEvent(EV.DEATH, { n: mpName(), k: k || 'Hostile', s: side }, {}); } catch (e) {}
   mpCheckElimination();
 }
@@ -393,6 +438,14 @@ function mpTick(dt) {
     p.x += (r.tx - p.x) * k; p.y += (r.ty - p.y) * k; p.z += (r.tz - p.z) * k;
     let dy = r.tyaw - r.g.rotation.y; dy = Math.atan2(Math.sin(dy), Math.cos(dy));
     r.g.rotation.y += dy * Math.min(1, dt * 10);
+    /* Adjust body rotation for prone stance when dead in 2v2 */
+    if (r.hp <= 0 && mpMode.id === '2v2') {
+      r.body.rotation.x = Math.PI / 2; /* Lie flat */
+      r.head.position.y = 0.35; /* Lower head */
+    } else {
+      r.body.rotation.x = 0;
+      r.head.position.y = 1.72;
+    }
     paintTag(r);
   }
   lobbyT -= dt;
@@ -471,7 +524,7 @@ function vcDrop(nr) { const pc = vc.pcs[nr]; if (pc) { try { pc.close(); } catch
 function mpRenderPanel() {
   const m = $('mmain'); if (!m) return;
   let h = '<h2>Multiplayer</h2>';
-  h += '<label>Your name<input id="mpname" maxlength="14" value="' + esc(S.mpName || '') + '" placeholder="Player"></label>';
+  h += '<label>Your name<input id="mpname" maxlength="20" value="' + esc(S.mpName || '') + '" placeholder="Player"><button data-mp="savename" style="margin-left:8px;padding:2px 10px">Save</button></label>';
   h += '<div class="tg"><button data-mp="sideA" class="' + (mySide === 'A' ? 'on' : '') + '">Attack</button><button data-mp="sideD" class="' + (mySide === 'D' ? 'on' : '') + '">Defend</button></div>';
   h += '<div class="tg">' + MODES.map(mo => '<button data-mp="mode' + mo.id + '" class="' + (mpMode.id === mo.id ? 'on' : '') + '">' + mo.label + '</button>').join('') + '</div>';
   h += '<p style="opacity:.8;font-size:16px">Attackers breach the walls and defuse the device. Defenders hold the building. Bots fill the empty spots on each side.</p>';
@@ -508,7 +561,10 @@ function mpRenderPanel() {
     h += '<p style="opacity:.7;font-size:15px;margin-top:10px">Voice: press <b>N</b> in game or use the button. Chat: <b>Enter</b>. Press <b>Tab</b> for the scoreboard.</p>';
   }
   m.innerHTML = h;
-  const ni = $('mpname'); if (ni) ni.onchange = () => { S.mpName = ni.value.trim(); save(); setMyProps(); mpRenderPanel(); };
+  const ni = $('mpname'); if (ni) {
+    ni.onchange = () => { S.mpName = ni.value.trim(); save(); setMyProps(); mpRenderPanel(); };
+    ni.onkeydown = e => { if (e.code === 'Enter') { e.preventDefault(); ni.blur(); } };
+  }
   const ni2 = $('mpname'); if (ni2) ni2.value = S.mpName || '';
   const ms = $('mpmap'); if (ms) ms.onchange = () => { MP.map = +ms.value; };
 }
@@ -521,6 +577,7 @@ function mpAction(a) {
   else if (a === 'start') mpStartMatch();
   else if (a === 'voice') vcToggle();
   else if (a === 'sideA' || a === 'sideD') { mySide = a === 'sideA' ? 'A' : 'D'; S.mpSide = mySide; save(); setMyProps(); mpRenderPanel(); }
+  else if (a === 'savename') { const ni = $('mpname'); if (ni) { S.mpName = ni.value.trim(); save(); setMyProps(); mpRenderPanel(); } }
   else { const mo = MODES.find(m => a === 'mode' + m.id); if (mo) { mpMode = mo; S.mpMode = mo.id; save(); setMyProps(); mpRenderPanel(); } }
 }
 
@@ -553,12 +610,12 @@ sbRender = function () {
   if (!MP.active || !MP.match) return _sb();
   const e = $('sbd'), mm = Math.max(0, Math.ceil(time));
   let r = '<h3>SCOREBOARD</h3><div>Round ' + rnd + ' · Attack ' + mpScore.A + ' — ' + mpScore.D + ' Defend · ' + Math.floor(mm / 60) + ':' + String(mm % 60).padStart(2, '0') + '</div><table><tr><th>Player</th><th>Side</th><th>Kills</th><th>Status</th></tr>';
-  r += '<tr class="me"><td>You (' + esc(mpName()) + ')</td><td>' + (side === 'A' ? 'ATTACK' : 'DEFEND') + '</td><td>' + (mpKills[mpName()] || 0) + '</td><td>' + (hp > 0 ? 'HP ' + Math.round(hp) : 'DOWN') + '</td></tr>';
+  r += '<tr class="me"><td>You (' + esc(mpName()) + ')</td><td>' + (side === 'A' ? 'ATTACK' : 'DEFEND') + '</td><td>' + (mpKills[mpName()] || 0) + '</td><td>' + (hp > 0 ? 'HP ' + Math.round(hp) : 'ELIMINATED') + '</td></tr>';
   for (const a of actors()) {
     if (a.isLocal) continue;
     const rn = rpOf(a.actorNr), p = a.getCustomProperties() || {};
     const nm = p.mpn || a.name || ('P' + a.actorNr);
-    r += '<tr><td>' + esc(nm) + '</td><td>' + ((p.mps || 'A') === 'D' ? 'DEFEND' : 'ATTACK') + '</td><td>' + (mpKills[nm] || 0) + '</td><td>' + (rn ? (rn.hp > 0 ? 'HP ' + Math.round(rn.hp) : 'DOWN') : '—') + '</td></tr>';
+    r += '<tr><td>' + esc(nm) + '</td><td>' + ((p.mps || 'A') === 'D' ? 'DEFEND' : 'ATTACK') + '</td><td>' + (mpKills[nm] || 0) + '</td><td>' + (rn ? (rn.hp > 0 ? 'HP ' + Math.round(rn.hp) : 'ELIMINATED') : '—') + '</td></tr>';
   }
   const en = side === 'A' ? 'Defender' : 'Attacker';
   bots.forEach((b, i) => { if (b.side === side) return; r += '<tr' + (b.alive ? '' : ' class="dead"') + '><td>' + en + ' ' + (i + 1) + '</td><td>BOT</td><td>–</td><td>' + (b.alive ? 'ALIVE' : 'ELIMINATED') + '</td></tr>'; });
