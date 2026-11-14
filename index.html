@@ -798,7 +798,14 @@ function showOv(m){ovMode=m;$('scope').style.display='none';$('ov').style.displa
  $('ovt').textContent='ROUND '+rnd+' · '+(side==='A'?'ATTACKING':'DEFENDING');
  const prepText = (typeof mpPrepTimer !== 'undefined' && mpPrepTimer > 0) ? '<br><br><div id="mpcd" style="font-size:48px;font-weight:700;color:var(--hud)">'+mpPrepTimer+'</div>' : '';
  $('ovb').innerHTML=side==='A'?'Breach the yellow walls, clear the defenders and <b>defuse the device</b> (the red device). Press <b>T</b> at the outside of the building to rappel to the roof and charge the <b>hatch</b>. Bullets punch through yellow walls and hatches at reduced damage. Pick an operator.'+prepText:'Hold the building and <b>stop the attackers</b> from defusing the device. Pick an operator.'+prepText;
- OPS.filter(x=>x.s===side).forEach(x=>{const d=document.createElement('div');d.className='op'+(x===op?' sel':'');d.innerHTML='<b>'+x.n+'</b><br>'+x.w+'<br><small>'+x.ab+' · HP '+x.hp+'</small>';d.onclick=()=>{saveOp(x);showOv('select')};o.appendChild(d)});$('go').textContent='Deploy';ldUI()}
+ OPS.filter(x=>x.s===side).forEach(x=>{const d=document.createElement('div');d.className='op'+(x===op?' sel':'');d.innerHTML='<b>'+x.n+'</b><br>'+x.w+'<br><small>'+x.ab+' · HP '+x.hp+'</small>';d.onclick=()=>{saveOp(x);showOv('select')};o.appendChild(d)});
+ if (state === 'prep') {
+   $('go').style.display = 'none'; /* Hide deploy button during prep */
+ } else {
+   $('go').textContent = 'Deploy';
+   $('go').style.display = 'block';
+ }
+ ldUI()}
 function end(win,t){if(state==='end')return;state='end';document.exitPointerLock();if(win){sc++;earn(20)}const last=rnd>=6;
  $('ovt').textContent=win?'ROUND WON':'ROUND LOST';
  $('ovb').innerHTML=t+'<br>Gold earned: <b>+'+rgold+'</b> (total '+S.gold+')<br>Score: <b>'+sc+'-'+(rnd-sc)+'</b> after round '+rnd+(last?'<br><b>'+(sc>6-sc?'MATCH WON':sc<6-sc?'MATCH LOST':'MATCH DRAWN')+'</b>':(rnd%2?'':'<br>Sides switch next round.'));

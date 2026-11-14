@@ -367,61 +367,36 @@ function onRound(c) {
     side = mySide;
     op = opFor(side);
 
-    if (rnd === 1) {
-      /* First round: show operator selection with 30s countdown */
-      mpPrepTimer = 30;
+    /* Every round: 30s prep phase with operator selection (look only, no movement) */
+    mpPrepTimer = 30;
+    window.mpPrepTimer = mpPrepTimer;
+    mpDeployed = {};
+    try { ren.domElement.requestPointerLock(); } catch (e) {}
+    startRound(); state = 'prep'; /* Prep state - can only look around */
+    ovMode = 'select';
+    showOv('select');
+    $('ov').style.display = 'flex'; /* Ensure overlay is visible during prep */
+    mpDeployed[myNr()] = 1;
+    try { lbc.raiseEvent(EV.DEPLOY, { n: mpName() }, {}); } catch (e) {}
+    mpRenderPanel();
+    feed('Round ' + rnd + ' — Prep phase: ' + mpPrepTimer + 's');
+    const prepInt = setInterval(() => {
+      if (!MP.active || !MP.match) { clearInterval(prepInt); return; }
+      mpPrepTimer--;
       window.mpPrepTimer = mpPrepTimer;
-      ovMode = 'select';
-      showOv('select');
-      mpRenderPanel();
-      feed('Round ' + rnd + ' — 30s to select operator');
-      const prepInt = setInterval(() => {
-        if (!MP.active || !MP.match || state !== 'menu') { clearInterval(prepInt); return; }
-        mpPrepTimer--;
-        window.mpPrepTimer = mpPrepTimer;
-        if (mpPrepTimer > 0) {
-          const cdEl = $('mpcd');
-          if (cdEl) cdEl.textContent = mpPrepTimer;
-          showOv('select');
-          feed('Round starting in ' + mpPrepTimer + 's');
-        } else {
-          clearInterval(prepInt);
-          window.mpPrepTimer = 0;
-          mpDeployed = {};
-          try { ren.domElement.requestPointerLock(); } catch (e) {}
-          startRound(); state = 'play'; $('ov').style.display = 'none';
-          mpDeployed[myNr()] = 1;
-          try { lbc.raiseEvent(EV.DEPLOY, { n: mpName() }, {}); } catch (e) {}
-          mpRenderPanel();
-          feed('Round ' + rnd + ' started');
-        }
-      }, 1000);
-    } else {
-      /* Subsequent rounds: 30s spectator prep phase (look only, no movement) */
-      mpPrepTimer = 30;
-      window.mpPrepTimer = mpPrepTimer;
-      mpDeployed = {};
-      try { ren.domElement.requestPointerLock(); } catch (e) {}
-      startRound(); state = 'prep'; /* Prep state - can only look around */
-      $('ov').style.display = 'none';
-      mpDeployed[myNr()] = 1;
-      try { lbc.raiseEvent(EV.DEPLOY, { n: mpName() }, {}); } catch (e) {}
-      mpRenderPanel();
-      feed('Round ' + rnd + ' — Prep phase: ' + mpPrepTimer + 's');
-      const prepInt = setInterval(() => {
-        if (!MP.active || !MP.match) { clearInterval(prepInt); return; }
-        mpPrepTimer--;
-        window.mpPrepTimer = mpPrepTimer;
-        if (mpPrepTimer > 0) {
-          msg('Prep phase: ' + mpPrepTimer + 's');
-        } else {
-          clearInterval(prepInt);
-          window.mpPrepTimer = 0;
-          state = 'play'; /* Transition to actual play */
-          feed('Round ' + rnd + ' started');
-        }
-      }, 1000);
-    }
+      if (mpPrepTimer > 0) {
+        const cdEl = $('mpcd');
+        if (cdEl) cdEl.textContent = mpPrepTimer;
+        showOv('select'); /* Refresh to update countdown */
+        msg('Prep phase: ' + mpPrepTimer + 's');
+      } else {
+        clearInterval(prepInt);
+        window.mpPrepTimer = 0;
+        state = 'play'; /* Transition to actual play */
+        $('ov').style.display = 'none';
+        feed('Round ' + rnd + ' started');
+      }
+    }, 1000);
   } else if (c.k === 'end') {
     mpScore = { A: c.sA != null ? c.sA : mpScore.A, D: c.sD != null ? c.sD : mpScore.D };
     mpRoundOver = true; mpShowEnd(c.w, c.r);
