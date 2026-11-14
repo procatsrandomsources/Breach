@@ -213,7 +213,7 @@ function mpOnEvent(code, c, a) {
     case EV.ROUND: onRound(c); break;
     case EV.DEPLOY: mpDeployed[a] = 1; mpRenderPanel(); break;
     case EV.ENDREQ: if (isHost() && !mpRoundOver) mpRoundEnd(c.w, c.r); break;
-    case EV.DEATH: feed((c.k || 'Someone') + ' eliminated ' + (c.n || 'a player')); mpKills[c.n] = (mpKills[c.n] || 0) + 1; break;
+    case EV.DEATH: feed((c.k || 'Someone') + ' eliminated ' + (c.n || 'a player')); mpKills[c.n] = (mpKills[c.n] || 0) + 1; mpCheckElimination(); break;
     case EV.VO: vcOnOffer(c, a); break;
     case EV.VOA: vcOnAnswer(c, a); break;
     case EV.VOI: vcOnIce(c, a); break;
@@ -244,6 +244,7 @@ function onHit(c) {
   hp -= (c.d || 0) * (gdB.arm > 0 ? .7 : 1);
   $('dmg').style.opacity = 1; shake = Math.max(shake, .12); mpKiller = c.k || null;
   snd(110, .14, 'sine', .3, -60);
+  if (hp <= 0) mpDie();
 }
 function mpHitPlayer(r, d, h, anySide) { /* called by game code when local player hits a remote */
   if (!MP.active || !r) return;
@@ -324,8 +325,8 @@ function mpShowEnd(ws, reason) {
   ovMode = 'mpresult'; $('ov').style.display = 'flex';
 }
 function mpToLobby() {
-  MP.match = false; MP.lobby = true; mpRoundOver = false; mpDeployed = {};
-  rpl.forEach(r => { r.g.visible = false; });
+  MP.match = false; MP.lobby = true; mpRoundOver = false; mpEndSent = false; mpDeployed = {};
+  rpl.forEach(r => { r.g.visible = false; r.hp = 100; r.alive = true; });
   state = 'menu'; try { document.exitPointerLock(); } catch (e) {}
   openMenu(); renderMenu('mp'); feed('Back to lobby');
 }
@@ -334,11 +335,11 @@ function mpGo() {
   AC = AC || new (window.AudioContext || window.webkitAudioContext)();
   if (ovMode === 'select') {
     side = mySide; op = opFor(side);
+    mpDeployed = {}; mpProt = 3; mpKiller = null;
     try { ren.domElement.requestPointerLock(); } catch (e) {}
     startRound(); state = 'play'; $('ov').style.display = 'none';
     mpDeployed[myNr()] = 1;
     try { lbc.raiseEvent(EV.DEPLOY, { n: mpName() }, {}); } catch (e) {}
-    mpKiller = null; mpProt = 3;
   } else if (ovMode === 'mpresult' && isHost()) {
     const last = (rnd >= 6) || (mpScore.A >= 4 || mpScore.D >= 4);
     if (last) { mpBroadcast({ k: 'lobby' }); mpToLobby(); }
@@ -359,7 +360,15 @@ function mpStartMatch() {
   mpBroadcast(ev); onRound(ev);
 }
 
-/* death: instant respawn, spawn protection, kill feed */
+function mpCheckElimination() {
+  if (!MP.active || !MP.match || mpRoundOver) return;
+  const aliveA = (hp > 0 ? 1 : 0) + rpl.filter(r => r.side === 'A' && r.hp > 0).length;
+  const aliveD = rpl.filter(r => r.side === 'D' && r.hp > 0).length;
+  if (aliveA === 0) mpRoundEnd('D', 'Attackers eliminated');
+  else if (aliveD === 0) mpRoundEnd('A', 'Defenders eliminated');
+}
+
+/* death: instant respawn, spawn protection, kill feed, elimination check */
 function mpDie() {
   const k = mpKiller || null; mpKiller = null;
   feed(k ? (k + ' eliminated you') : 'You were eliminated');
@@ -369,7 +378,8 @@ function mpDie() {
   const off = ((myNr() % 5) - 2) * .9;
   if (side === 'A') { P.set(off, 1.6, 22); Dr.set(off, .35, 20); yaw = 0; }
   else { P.set(MAP.dsp[0] + off, 1.6, MAP.dsp[1]); yaw = Math.PI; }
-  try { lbc.raiseEvent(EV.DEATH, { n: mpName(), k: k || 'Hostile' }, {}); } catch (e) {}
+  try { lbc.raiseEvent(EV.DEATH, { n: mpName(), k: k || 'Hostile', s: side }, {}); } catch (e) {}
+  mpCheckElimination();
 }
 
 /* ---------------- per-frame ---------------- */
@@ -577,5 +587,5 @@ gTick = function (dt) { _gt(dt); mpTick(dt); };
 })();
 
 /* functions the game script calls directly — must live on the global object */
-Object.assign(window, { mpTgt, mpDie, mpHitPlayer, mpBotShot, mpSendFire, mpSendBreach, mpSideCount, mpBotFill: () => mpMode.bots });
+Object.assign(window, { mpTgt, mpDie, mpHitPlayer, mpBotShot, mpSendFire, mpSendBreach, mpSideCount, mpBotFill: () => mpMode.bots, mpCheckElimination });
 })();
